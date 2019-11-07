@@ -1,0 +1,102 @@
+#region Syslog Notes
+#Syslog stuff learned
+<#
+
+If you have bash version 2.04+ compiled with --enable-net-redirections (it isn’t compiled this way in Debian and derivatives), you can use bash itself. The following example is also used in Finding My IP Address:
+
+$ exec 3<> /dev/tcp/www.ippages.com/80
+$ echo -e "GET /simple/?se=1 HTTP/1.0\n" >&3
+$ cat <&3
+HTTP/1.1 200 OK
+Date: Tue, 28 Nov 2006 08:13:08 GMT
+Server: Apache/2.0.52 (Red Hat)
+X-Powered-By: PHP/4.3.9
+Set-Cookie: smipcomID=6670614; expires=Sun, 27-Nov-2011 08:13:09 GMT; path=/
+Pragma: no-cache
+Cache-Control: no-cache, must-revalidate
+Content-Length: 125
+Connection: close
+Content-Type: text/plain; charset=ISO-8859-1
+
+72.NN.NN.225 (US-United States) http://www..com Tue, 28 Nov 2006 08:13:09 UTC/GMT
+flagged User Agent - reduced functionality
+WARNING
+As noted, this recipe will probably not work under Debian and derivatives such as Ubuntu since they expressly do not compile bash with --enable-net-redirections.
+
+Discussion
+As noted in Redirecting Output for the Life of a Script, it is possible to use exec to permanently redirect file handles within the current shell session, so the first command sets up input and output on file handle 3. The second line sends a trivial command to a path on the web server defined in the first command. Note that the user agent will appear as “-” on the web server side, which is what is causing the “flagged User Agent” warning. The third command simply displays the results.
+
+Both TCP and UDP are supported. Here is a trivial way to send syslog messages to a remote server (although in production we recommend using the logger utility, which is much more user friendly and robust):
+
+echo "<133>${0##*/}[$$]: Test syslog message from bash" > /dev/udp/loghost.example.com/514
+#####
+Secret sauce:
+Since UDP is connectionless, this is actually much easier to use than the previous TCP example. <133> is the syslog priority value for local0.notice, calculated according to RFC 3164. See the RFC “4.1.1 PRI Part” and logger manpage for details. $0 is the name, so ${0##*/} is the “basename” and $$ is the process ID of the current program. The name will be -bash for a login shell.
+
+$ logger -p local0.notice -t ${0##*/}[$$] test message
+Netcat is known as the “TCP/IP Swiss Army knife” and is usually not installed by default. It may also be prohibited as a hacking tool by some security policies, though bash’s net-redirection features do pretty much the same thing. See the discussion in Using bash Net-Redirection for details on the <133>${0##*/}[$$] part.
+
+# Netcat
+$ echo "<133>${0##*/}[$$]: Test syslog message from Netcat" | nc -w1 -u loghost 514
+
+# bash
+$ echo "<133>${0##*/}[$$]: Test syslog message from bash" \
+  > /dev/udp/loghost.example.com/514
+
+
+
+
+#>
+
+#More secret sauce on using syslog
+<#
+SMS events can be directed to a remote Syslog server. Through the SMS Admin interface, you can configure which events are sent to a remote Syslog server. When you create a new remote Syslog server, you have the option to exclude backlog events.
+
+Each Syslog message includes a priority value at the beginning of the text. The priority value ranges from 0 to 191 and is not space or leading zero padded. The priority is enclosed in "<>" delimiters. E.g. <PRI>HEADER MESSAGE.
+
+The priority value is calculated using the formula (Priority = Facility * 8 + Level). For example, a kernel message (Facility=0) with a Severity of Emergency (Severity=0) would have a Priority value of 0. Also, a "local use 4" message (Facility=20) with a Severity of Notice (Severity=5) would have a Priority value of 165.
+
+Syslog Facilities
+
+The facility represents the machine process that created the syslog event. For example, is the event created by the kernel, by the mail system, by security/authorization processes, etc.? In the context of this field, the facility represents a kind of filter, instructing SMS to forward to the remote Syslog Server only those events whose facility matches the one defined in this field. So by changing the facility number and/or the severity level you change the amount of alerts (messages) that are sent to the remote syslog server
+
+The Facility value is a way of determining which process of the machine created the message. Since the Syslog protocol was originally written on BSD Unix, the Facilities reflect the names of UNIX processes and Daemons.
+
+List of available Facilities as per RFC5424:
+Facility Number	Facility Description	Facility Number	Facility Description
+0	kernel messages	12	NTP subsystem
+1	user-level messages	13	log audit
+2	mail system	14	log alert
+3	system daemons	15	clock daemon
+4	**security/authorization messages	16	local use 0 (local0)
+5	messages generated internally by syslog	17	local use 1 (local1)
+6	line printer subsystem	18	local use 2 (local2)
+7	network news subsystem	19	local use 3 (local3)
+8	UUCP subsystem	20	local use 4 (local4)
+9	clock daemon	21	local use 5 (local5)
+10	security/authorization messages	22	local use 6 (local6)
+11	FTP daemon	23	local use 7 (local7)
+** SMS default
+Note: Items in yellow are the facility numbers available on the SMS.
+
+
+If you are receiving messages from a UNIX system, it is suggested you use the “User” Facility as your first choice. Local0 through to Local7 are not used by UNIX and are traditionally used by networking equipment. Cisco routers for example use Local6 or Local7.
+
+Syslog Severity Levels
+
+Recommended practice is to use the Notice or Informational level for normal messages.
+
+Explanation of the severity Levels:
+SEVERITY LEVEL	EXPLANATION
+**	SEVERITY IN EVENT	Default SMS setting for Syslog Security option. This setting will send all events to remote Syslog system
+0	EMERGENCY	A "panic" condition - notify all tech staff on call? (Earthquake? Tornado?) - affects multiple apps/servers/sites.
+1	ALERT	Should be corrected immediately - notify staff who can fix the problem - example is loss of backup ISP connection.
+2	CRITICAL	Should be corrected immediately, but indicates failure in a primary system - fix CRITICAL problems before ALERT - example is loss of primary ISP connection.
+3	ERROR	Non-urgent failures - these should be relayed to developers or admins; each item must be resolved within a given time.
+4	WARNING	Warning messages - not an error, but indication that an error will occur if action is not taken, e.g. file system 85% full - each item must be resolved within a given time.
+5	NOTICE	Events that are unusual but not error conditions - might be summarized in an email to developers or admins to spot potential problems - no immediate action required.
+6	INFORMATIONAL	Normal operational messages - may be harvested for reporting, measuring throughput, etc. - no action required.
+7	DEBUG	Info useful to developers for debugging the app, not useful during operations.
+** SMS default
+#>
+#endregion Syslog Notes
